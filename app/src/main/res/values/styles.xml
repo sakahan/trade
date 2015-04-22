@@ -1,0 +1,18 @@
+<resources>
+
+    <!-- Base application theme. -->
+    <style name="AppTheme" parent="@style/Theme.AppCompat.Light.NoActionBar">
+        <item name="colorPrimary">@color/toolbar_primary</item>
+        <item name="colorPrimaryDark">@color/toolbar_primary_dark</item>
+        <item name="colorAccent">@color/toolbar_primary</item>
+        <item name="android:windowBackground">@color/toolbar_primary</item>
+        <item name="windowActionBar">false</item>
+    </style>
+
+    <style name="ActionBarPopupThemeOverlay" parent="ThemeOverlay.AppCompat.Dark">
+        <item name="android:background">@color/drawer_background</item>
+        <item name="android:textColor">@color/drawer_text</item>
+        <item name="android:textSize">18sp</item>
+    </style>
+
+</resources>

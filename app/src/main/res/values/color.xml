@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--toolbar-->
+    <color name="toolbar_primary">#880E4F</color>
+    <color name="toolbar_primary_dark">#880E4F</color>
+    <color name="toolbar_arrow">#667881</color>
+
+    <!--drawer-->
+    <color name="drawer_background">#fff</color>
+    <color name="drawer_text">#000000</color>
+
+</resources>
