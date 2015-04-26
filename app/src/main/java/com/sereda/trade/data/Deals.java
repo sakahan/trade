@@ -2,6 +2,7 @@ package com.sereda.trade.data;
 
 public class Deals {
     private String symbol;
+    private int id;
     private int dealID;
     private String startAt;
     private String endAt;
@@ -12,7 +13,7 @@ public class Deals {
     private double minStake;
     private double maxStake;
 
-    public Deals(String symbol, int dealID, String startAt, String endAt,
+    public Deals(String symbol, int id, int dealID, String startAt, String endAt,
                  boolean expirationIsFixed, String duration, double payMatch,
                  double payNoMatch, double minStake, double maxStake) {
         this.symbol = symbol;
@@ -25,6 +26,14 @@ public class Deals {
         this.payNoMatch = payNoMatch;
         this.minStake = minStake;
         this.maxStake = maxStake;
+    }
+
+    public int getId() {
+        return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
     }
 
     public String getSymbol() {

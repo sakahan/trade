@@ -20,4 +20,13 @@
     <string name="ref_time_300" translatable="false">300 sec</string>
     <string name="prefs_ref_time_group_name">Refresh time</string>
     <string name="prefs_ref_time_title">Choose refresh time</string>
+
+    <!--chart fragment-->
+    <string name="cf_button_candle_chart">Candle chart</string>
+    <string name="cf_button_bar_chart">Bar chart</string>
+    <string name="cf_button_line_chart">Line chart</string>
+    <string name="cf_button_open_chart">Open chart</string>
+    <string name="cf_edit_text_asset">GOOG</string>
+    <string name="cf_edit_text_start_date">2015-01-01</string>
+    <string name="cf_edit_text_end_date">2015-04-01</string>
 </resources>

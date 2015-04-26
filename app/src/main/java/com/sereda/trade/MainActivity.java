@@ -26,14 +26,16 @@ import android.widget.Toast;
 
 import com.sereda.trade.adapters.DrawerAdapter;
 import com.sereda.trade.data.DrawerItem;
-import com.sereda.trade.fragments.DealsDetailsFragment;
+import com.sereda.trade.fragments.ChartFragment;
+import com.sereda.trade.fragments.DealsFragment;
 import com.sereda.trade.fragments.PrefFragment;
 
 import java.util.ArrayList;
 
 public class MainActivity extends ActionBarActivity {
     private static final String PREFERENCE_FRAGMENT = "preference_fragment";
-    private static final String DETAILS_FRAGMENT = "details_fragment";
+    private static final String CHART_FRAGMENT = "chart_fragment";
+    private static final String DEALS_FRAGMENT = "deals_fragment";
     private static final int DEFAULT_REFRESH_TIME = 60;
     private static final int MILLI_SECONDS = 1000;
     private static long back_pressed;
@@ -54,7 +56,7 @@ public class MainActivity extends ActionBarActivity {
                 handler.post(new Runnable() {
                     @Override
                     public void run() {
-                        DealsDetailsFragment.getDealsData();
+                        DealsFragment.getDealsData();
                     }
                 });
 
@@ -153,17 +155,17 @@ public class MainActivity extends ActionBarActivity {
         actionBarDrawerToggle.setDrawerIndicatorEnabled(true);
         drawerListView.setOnItemClickListener(new DrawerItemClickListener());
 
-        openDetailsFragment();
+        openDealsFragment();
     }
 
-    private void openDetailsFragment() {
-        Fragment fragment = new DealsDetailsFragment();
+    private void openDealsFragment() {
+        Fragment fragment = new DealsFragment();
         FragmentTransaction transaction = getFragmentManager().beginTransaction();
-        transaction.addToBackStack(DETAILS_FRAGMENT);
+        transaction.addToBackStack(DEALS_FRAGMENT);
         if (fragment.isAdded()) {
             transaction.show(fragment);
         } else {
-            transaction.replace(R.id.container, fragment, DETAILS_FRAGMENT);
+            transaction.replace(R.id.container, fragment, DEALS_FRAGMENT);
         }
         transaction.commit();
     }
@@ -184,6 +186,8 @@ public class MainActivity extends ActionBarActivity {
 
     private void setDrawer() {
         ArrayList<DrawerItem> drawerData = new ArrayList<>();
+        drawerData.add(new DrawerItem("Trade's list"));
+        drawerData.add(new DrawerItem("Chart's"));
         drawerData.add(new DrawerItem("Settings"));
         drawerData.add(new DrawerItem("Refresh"));
         drawerData.add(new DrawerItem("Share"));
@@ -200,6 +204,28 @@ public class MainActivity extends ActionBarActivity {
 
         switch (position) {
             case 0:
+                fragment = new DealsFragment();
+                transaction = getFragmentManager().beginTransaction();
+                transaction.addToBackStack(DEALS_FRAGMENT);
+                if (fragment.isAdded()) {
+                    transaction.show(fragment);
+                } else {
+                    transaction.replace(R.id.container, fragment, DEALS_FRAGMENT);
+                }
+                transaction.commit();
+                break;
+            case 1:
+                fragment = new ChartFragment();
+                transaction = getFragmentManager().beginTransaction();
+                transaction.addToBackStack(CHART_FRAGMENT);
+                if (fragment.isAdded()) {
+                    transaction.show(fragment);
+                } else {
+                    transaction.replace(R.id.container, fragment, CHART_FRAGMENT);
+                }
+                transaction.commit();
+                break;
+            case 2:
                 fragment = new PrefFragment();
                 transaction = getFragmentManager().beginTransaction();
                 transaction.addToBackStack(PREFERENCE_FRAGMENT);
@@ -210,10 +236,10 @@ public class MainActivity extends ActionBarActivity {
                 }
                 transaction.commit();
                 break;
-            case 1:
-                DealsDetailsFragment.getDealsData();
+            case 3:
+                DealsFragment.getDealsData();
                 break;
-            case 2:
+            case 4:
                 //TODO create share
                 showToast("I am using \"Trade\" with common social platforms...");
                 break;
