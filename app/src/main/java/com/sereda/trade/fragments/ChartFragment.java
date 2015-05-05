@@ -30,7 +30,8 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.util.ArrayList;
+import java.text.SimpleDateFormat;
+import java.util.*;
 
 public class ChartFragment extends Fragment {
     private static final int CANDLE_STICK_CHART = 1;
@@ -44,15 +45,16 @@ public class ChartFragment extends Fragment {
     private ArrayList<CandleChartData> candleChartData;
     private ArrayList<BarChartData> barChartData;
     private ArrayList<LineChartData> lineChartData;
-    private UiRelatedTask<ArrayList<CandleEntry>> candleChartNeedle;
-    private UiRelatedTask<ArrayList<BarEntry>> barChartNeedle;
-    private UiRelatedTask<ArrayList<Entry>> lineChartNeedle;
+    private UiRelatedTask<ArrayList<CandleChartData>> candleChartNeedle;
+    private UiRelatedTask<ArrayList<BarChartData>> barChartNeedle;
+    private UiRelatedTask<ArrayList<LineChartData>> lineChartNeedle;
     private ArrayList<CandleEntry> candleEntries;
     private ArrayList<BarEntry> barEntries;
     private ArrayList<Entry> lineEntries;
     private ArrayList<BarDataSet> barDataSet;
     private ArrayList<LineDataSet> lineDataSet;
     private CandleDataSet candleDataSet;
+    private String end = null, start = null;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -157,22 +159,51 @@ public class ChartFragment extends Fragment {
         lineChart = (LineChart) view.findViewById(R.id.line_chart);
     }
 
+    private String setDate(Date date) {
+        return new SimpleDateFormat("yyyy", Locale.ENGLISH).format(date) + "-"
+                + new SimpleDateFormat("MM", Locale.ENGLISH).format(date) + "-"
+                + new SimpleDateFormat("dd", Locale.ENGLISH).format(date);
+    }
+
+    private void setStartEndDate() {
+        Calendar calendar = Calendar.getInstance();
+        Date endDate = calendar.getTime();
+        calendar.setTime(endDate);
+        calendar.add(Calendar.MONTH, -3);
+        Date startDate = calendar.getTime();
+
+        if (etEndDate.getText().toString().isEmpty()) {
+            end = setDate(endDate);
+        } else {
+            end = etEndDate.getText().toString();
+        }
+
+        if (etStartDate.getText().toString().isEmpty()) {
+            start = setDate(startDate);
+        } else {
+            start = etStartDate.getText().toString();
+        }
+    }
+
     private void getCandleChartData() {
         if (null != candleChartNeedle) {
             candleChartNeedle.cancel();
             candleChartNeedle = null;
         }
         removeLineDataSet(CANDLE_STICK_CHART);
+        setStartEndDate();
 
-        candleChartNeedle = new UiRelatedTask<ArrayList<CandleEntry>>() {
+        candleChartNeedle = new UiRelatedTask<ArrayList<CandleChartData>>() {
             @Override
-            protected ArrayList<CandleEntry> doWork() {
+            protected ArrayList<CandleChartData> doWork() {
                 try {
                     DefaultHttpClient hc = new DefaultHttpClient();
                     ResponseHandler<String> res = new BasicResponseHandler();
-                    HttpGet postMethod = new HttpGet("https://query.yahooapis.com/v1/public/yql?q=select%20%2A%20from%20yahoo.finance.historicaldata%20where%20symbol%20%3D%20%22" +
-                            etAssetName.getText().toString() + "%22%20and%20startDate%20%3D%20%22" + etStartDate.getText().toString() + "%22%20and%20endDate%20%3D%20%22"
-                            + etEndDate.getText().toString() + "%22&format=json&diagnostics=true&env=http%3A%2F%2Fdatatables.org%2Falltables.env&callback%22");
+                    HttpGet postMethod = new HttpGet("https://query.yahooapis.com/v1/public/yql?q=select%20%2A%20from%20yahoo.finance.historicaldata%20where%20symbol%20%3D%20%22"
+                            + etAssetName.getText().toString()
+                            + "%22%20and%20startDate%20%3D%20%22" + start
+                            + "%22%20and%20endDate%20%3D%20%22" + end
+                            + "%22&format=json&diagnostics=true&env=http%3A%2F%2Fdatatables.org%2Falltables.env&callback%22");
                     String response = hc.execute(postMethod, res);
 
                     try {
@@ -190,12 +221,6 @@ public class ChartFragment extends Fragment {
                                     quoteArray.getJSONObject(i).getDouble("Close"),
                                     quoteArray.getJSONObject(i).getInt("Volume"),
                                     quoteArray.getJSONObject(i).getDouble("Adj_Close")));
-
-                            candleEntries.add(new CandleEntry(i,
-                                    Float.parseFloat(String.valueOf(quoteArray.getJSONObject(i).getDouble("High"))),
-                                    Float.parseFloat(String.valueOf(quoteArray.getJSONObject(i).getDouble("Low"))),
-                                    Float.parseFloat(String.valueOf(quoteArray.getJSONObject(i).getDouble("Open"))),
-                                    Float.parseFloat(String.valueOf(quoteArray.getJSONObject(i).getDouble("Close")))));
                         }
                     } catch (JSONException e) {
                         e.printStackTrace();
@@ -204,48 +229,59 @@ public class ChartFragment extends Fragment {
                     e.printStackTrace();
                 }
 
-                return candleEntries;
+                return candleChartData;
             }
 
             @Override
-            protected void thenDoUiRelatedWork(ArrayList<CandleEntry> result) {
+            protected void thenDoUiRelatedWork(ArrayList<CandleChartData> result) {
                 if (null != result && result.size() > 0) {
+                    Collections.reverse(result);
+                    for (int i = 0; i < result.size(); i++) {
+                        candleEntries.add(new CandleEntry(i,
+                                Float.parseFloat(String.valueOf(result.get(i).getHigh())),
+                                Float.parseFloat(String.valueOf(result.get(i).getLow())),
+                                Float.parseFloat(String.valueOf(result.get(i).getOpen())),
+                                Float.parseFloat(String.valueOf(result.get(i).getClose()))));
+                    }
+
                     if (null != candleDataSet) {
                         candleDataSet = null;
                     }
-                    candleDataSet = new CandleDataSet(result, etAssetName.getText().toString());
-                    candleDataSet.setAxisDependency(YAxis.AxisDependency.LEFT);
-                    candleDataSet.setColor(Color.rgb(80, 80, 80));
-                    candleDataSet.setShadowColor(Color.DKGRAY);
-                    candleDataSet.setShadowWidth(0.7f);
-                    candleDataSet.setDecreasingColor(Color.RED);
-                    candleDataSet.setDecreasingPaintStyle(Paint.Style.STROKE);
-                    candleDataSet.setIncreasingColor(Color.rgb(122, 242, 84));
-                    candleDataSet.setIncreasingPaintStyle(Paint.Style.FILL);
-
-                    if (null != candleStickChart) {
-                        XAxis xAxis = candleStickChart.getXAxis();
-                        xAxis.setPosition(XAxis.XAxisPosition.BOTTOM);
-
-                        YAxis leftAxis = candleStickChart.getAxisLeft();
-                        YAxis rightAxis = candleStickChart.getAxisRight();
-                        leftAxis.setStartAtZero(false);
-                        rightAxis.setStartAtZero(false);
-                    }
-
-                    ArrayList<String> xVals = new ArrayList<>();
-                    if (null != candleChartData && candleChartData.size() > 0) {
-                        for (CandleChartData aCandleChartData : candleChartData) {
-                            xVals.add(aCandleChartData.getDate());
-                        }
-                    }
-
-                    if (xVals.size() > 0 && candleDataSet != null) {
-                        CandleData data = new CandleData(xVals, candleDataSet);
+                    if (null != candleEntries && !candleEntries.isEmpty()) {
+                        candleDataSet = new CandleDataSet(candleEntries, etAssetName.getText().toString());
+                        candleDataSet.setAxisDependency(YAxis.AxisDependency.LEFT);
+                        candleDataSet.setColor(Color.rgb(80, 80, 80));
+                        candleDataSet.setShadowColor(Color.DKGRAY);
+                        candleDataSet.setShadowWidth(0.7f);
+                        candleDataSet.setDecreasingColor(Color.RED);
+                        candleDataSet.setDecreasingPaintStyle(Paint.Style.STROKE);
+                        candleDataSet.setIncreasingColor(Color.rgb(122, 242, 84));
+                        candleDataSet.setIncreasingPaintStyle(Paint.Style.FILL);
 
                         if (null != candleStickChart) {
-                            candleStickChart.setData(data);
-                            candleStickChart.invalidate();
+                            XAxis xAxis = candleStickChart.getXAxis();
+                            xAxis.setPosition(XAxis.XAxisPosition.BOTTOM);
+
+                            YAxis leftAxis = candleStickChart.getAxisLeft();
+                            YAxis rightAxis = candleStickChart.getAxisRight();
+                            leftAxis.setStartAtZero(false);
+                            rightAxis.setStartAtZero(false);
+                        }
+
+                        ArrayList<String> xVals = new ArrayList<>();
+                        if (null != candleChartData && candleChartData.size() > 0) {
+                            for (CandleChartData aCandleChartData : candleChartData) {
+                                xVals.add(aCandleChartData.getDate());
+                            }
+                        }
+
+                        if (xVals.size() > 0 && candleDataSet != null) {
+                            CandleData data = new CandleData(xVals, candleDataSet);
+
+                            if (null != candleStickChart) {
+                                candleStickChart.setData(data);
+                                candleStickChart.invalidate();
+                            }
                         }
                     }
                 }
@@ -265,16 +301,19 @@ public class ChartFragment extends Fragment {
         if (null != barEntries && barEntries.size() > 0) {
             barEntries.clear();
         }
+        setStartEndDate();
 
-        barChartNeedle = new UiRelatedTask<ArrayList<BarEntry>>() {
+        barChartNeedle = new UiRelatedTask<ArrayList<BarChartData>>() {
             @Override
-            protected ArrayList<BarEntry> doWork() {
+            protected ArrayList<BarChartData> doWork() {
                 try {
                     DefaultHttpClient hc = new DefaultHttpClient();
                     ResponseHandler<String> res = new BasicResponseHandler();
-                    HttpGet postMethod = new HttpGet("https://query.yahooapis.com/v1/public/yql?q=select%20%2A%20from%20yahoo.finance.historicaldata%20where%20symbol%20%3D%20%22" +
-                            etAssetName.getText().toString() + "%22%20and%20startDate%20%3D%20%22" + etStartDate.getText().toString() + "%22%20and%20endDate%20%3D%20%22"
-                            + etEndDate.getText().toString() + "%22&format=json&diagnostics=true&env=http%3A%2F%2Fdatatables.org%2Falltables.env&callback%22");
+                    HttpGet postMethod = new HttpGet("https://query.yahooapis.com/v1/public/yql?q=select%20%2A%20from%20yahoo.finance.historicaldata%20where%20symbol%20%3D%20%22"
+                            + etAssetName.getText().toString()
+                            + "%22%20and%20startDate%20%3D%20%22" + start
+                            + "%22%20and%20endDate%20%3D%20%22" + end
+                            + "%22&format=json&diagnostics=true&env=http%3A%2F%2Fdatatables.org%2Falltables.env&callback%22");
                     String response = hc.execute(postMethod, res);
 
                     try {
@@ -286,8 +325,6 @@ public class ChartFragment extends Fragment {
                             barChartData.add(new BarChartData(i,
                                     quoteArray.getJSONObject(i).getString("Date"),
                                     quoteArray.getJSONObject(i).getDouble("Close")));
-                            barEntries.add(
-                                    new BarEntry(Float.parseFloat(String.valueOf(quoteArray.getJSONObject(i).getDouble("Close"))), i));
                         }
                     } catch (JSONException e) {
                         e.printStackTrace();
@@ -296,12 +333,17 @@ public class ChartFragment extends Fragment {
                     e.printStackTrace();
                 }
 
-                return barEntries;
+                return barChartData;
             }
 
             @Override
-            protected void thenDoUiRelatedWork(ArrayList<BarEntry> result) {
+            protected void thenDoUiRelatedWork(ArrayList<BarChartData> result) {
                 removeLineDataSet(BAR_CHART);
+
+                Collections.reverse(result);
+                for (int i = 0; i < result.size(); i++) {
+                    barEntries.add(new BarEntry(Float.parseFloat(String.valueOf(result.get(i).getClose())), i));
+                }
 
                 ArrayList<String> xVals = new ArrayList<>();
                 for (BarChartData aBarChartData : barChartData) {
@@ -309,26 +351,28 @@ public class ChartFragment extends Fragment {
                 }
 
                 ArrayList<BarEntry> yVals = new ArrayList<>();
-                for (BarEntry aResult : result) {
-                    yVals.add(aResult);
+                if (null != barEntries && !barEntries.isEmpty()) {
+                    for (BarEntry entries : barEntries) {
+                        yVals.add(entries);
+                    }
+
+                    BarDataSet set = new BarDataSet(yVals, etAssetName.getText().toString());
+                    set.setBarSpacePercent(35f);
+
+                    barDataSet.add(set);
+
+                    XAxis xAxis = barChart.getXAxis();
+                    xAxis.setPosition(XAxis.XAxisPosition.BOTTOM);
+
+                    YAxis leftAxis = barChart.getAxisLeft();
+                    YAxis rightAxis = barChart.getAxisRight();
+                    leftAxis.setStartAtZero(false);
+                    rightAxis.setStartAtZero(false);
+
+                    BarData barData = new BarData(xVals, barDataSet);
+                    barChart.setData(barData);
+                    barChart.invalidate();
                 }
-
-                BarDataSet set = new BarDataSet(yVals, etAssetName.getText().toString());
-                set.setBarSpacePercent(35f);
-
-                barDataSet.add(set);
-
-                XAxis xAxis = barChart.getXAxis();
-                xAxis.setPosition(XAxis.XAxisPosition.BOTTOM);
-
-                YAxis leftAxis = barChart.getAxisLeft();
-                YAxis rightAxis = barChart.getAxisRight();
-                leftAxis.setStartAtZero(false);
-                rightAxis.setStartAtZero(false);
-
-                BarData barData = new BarData(xVals, barDataSet);
-                barChart.setData(barData);
-                barChart.invalidate();
             }
         };
         Needle.onBackgroundThread().withThreadPoolSize(1).execute(barChartNeedle);
@@ -345,16 +389,18 @@ public class ChartFragment extends Fragment {
         if (null != lineEntries && lineEntries.size() > 0) {
             lineEntries.clear();
         }
+        setStartEndDate();
 
-        lineChartNeedle = new UiRelatedTask<ArrayList<Entry>>() {
+        lineChartNeedle = new UiRelatedTask<ArrayList<LineChartData>>() {
             @Override
-            protected ArrayList<Entry> doWork() {
+            protected ArrayList<LineChartData> doWork() {
                 try {
                     DefaultHttpClient hc = new DefaultHttpClient();
                     ResponseHandler<String> res = new BasicResponseHandler();
-                    HttpGet postMethod = new HttpGet("https://query.yahooapis.com/v1/public/yql?q=select%20%2A%20from%20yahoo.finance.historicaldata%20where%20symbol%20%3D%20%22" + etAssetName.getText().toString()
-                            + "%22%20and%20startDate%20%3D%20%22" + etStartDate.getText().toString()
-                            + "%22%20and%20endDate%20%3D%20%22" + etEndDate.getText().toString()
+                    HttpGet postMethod = new HttpGet("https://query.yahooapis.com/v1/public/yql?q=select%20%2A%20from%20yahoo.finance.historicaldata%20where%20symbol%20%3D%20%22"
+                            + etAssetName.getText().toString()
+                            + "%22%20and%20startDate%20%3D%20%22" + start
+                            + "%22%20and%20endDate%20%3D%20%22" + end
                             + "%22&format=json&diagnostics=true&env=http%3A%2F%2Fdatatables.org%2Falltables.env&callback%22");
                     String response = hc.execute(postMethod, res);
 
@@ -367,8 +413,6 @@ public class ChartFragment extends Fragment {
                             lineChartData.add(new LineChartData(i,
                                     quoteArray.getJSONObject(i).getString("Date"),
                                     quoteArray.getJSONObject(i).getDouble("Close")));
-                            lineEntries.add(
-                                    new BarEntry(Float.parseFloat(String.valueOf(quoteArray.getJSONObject(i).getDouble("Close"))), i));
                         }
                     } catch (JSONException e) {
                         e.printStackTrace();
@@ -377,12 +421,17 @@ public class ChartFragment extends Fragment {
                     e.printStackTrace();
                 }
 
-                return lineEntries;
+                return lineChartData;
             }
 
             @Override
-            protected void thenDoUiRelatedWork(ArrayList<Entry> result) {
+            protected void thenDoUiRelatedWork(ArrayList<LineChartData> result) {
                 removeLineDataSet(LINE_CHART);
+
+                Collections.reverse(result);
+                for (int i = 0; i < result.size(); i++) {
+                    lineEntries.add(new BarEntry(Float.parseFloat(String.valueOf(result.get(i).getClose())), i));
+                }
 
                 ArrayList<String> xVals = new ArrayList<>();
                 for (LineChartData aLineChartData : lineChartData) {
@@ -390,34 +439,36 @@ public class ChartFragment extends Fragment {
                 }
 
                 ArrayList<Entry> yVals = new ArrayList<>();
-                for (Entry aResult : result) {
-                    yVals.add(aResult);
+                if (null != lineEntries && !lineEntries.isEmpty()) {
+                    for (Entry entries : lineEntries) {
+                        yVals.add(entries);
+                    }
+
+                    LineDataSet set = new LineDataSet(yVals, etAssetName.getText().toString());
+                    set.setColor(Color.BLACK);
+                    set.setCircleColor(Color.BLACK);
+                    set.setLineWidth(1f);
+                    set.setCircleSize(2f);
+                    set.setDrawCircleHole(false);
+                    set.setValueTextSize(9f);
+                    set.setFillAlpha(65);
+                    set.setFillColor(Color.BLACK);
+
+                    lineDataSet.add(set);
+
+                    XAxis xAxis = lineChart.getXAxis();
+                    xAxis.setPosition(XAxis.XAxisPosition.BOTTOM);
+
+                    YAxis leftAxis = lineChart.getAxisLeft();
+                    YAxis rightAxis = lineChart.getAxisRight();
+                    leftAxis.setStartAtZero(false);
+                    rightAxis.setStartAtZero(false);
+
+                    LineData data = new LineData(xVals, lineDataSet);
+
+                    lineChart.setData(data);
+                    lineChart.invalidate();
                 }
-
-                LineDataSet set = new LineDataSet(yVals, etAssetName.getText().toString());
-                set.setColor(Color.BLACK);
-                set.setCircleColor(Color.BLACK);
-                set.setLineWidth(1f);
-                set.setCircleSize(2f);
-                set.setDrawCircleHole(false);
-                set.setValueTextSize(9f);
-                set.setFillAlpha(65);
-                set.setFillColor(Color.BLACK);
-
-                lineDataSet.add(set);
-
-                XAxis xAxis = lineChart.getXAxis();
-                xAxis.setPosition(XAxis.XAxisPosition.BOTTOM);
-
-                YAxis leftAxis = lineChart.getAxisLeft();
-                YAxis rightAxis = lineChart.getAxisRight();
-                leftAxis.setStartAtZero(false);
-                rightAxis.setStartAtZero(false);
-
-                LineData data = new LineData(xVals, lineDataSet);
-
-                lineChart.setData(data);
-                lineChart.invalidate();
             }
         };
         Needle.onBackgroundThread().withThreadPoolSize(1).execute(lineChartNeedle);
