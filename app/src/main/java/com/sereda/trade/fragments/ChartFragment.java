@@ -352,9 +352,10 @@ public class ChartFragment extends Fragment {
                 try {
                     DefaultHttpClient hc = new DefaultHttpClient();
                     ResponseHandler<String> res = new BasicResponseHandler();
-                    HttpGet postMethod = new HttpGet("https://query.yahooapis.com/v1/public/yql?q=select%20%2A%20from%20yahoo.finance.historicaldata%20where%20symbol%20%3D%20%22" +
-                            etAssetName.getText().toString() + "%22%20and%20startDate%20%3D%20%22" + etStartDate.getText().toString() + "%22%20and%20endDate%20%3D%20%22"
-                            + etEndDate.getText().toString() + "%22&format=json&diagnostics=true&env=http%3A%2F%2Fdatatables.org%2Falltables.env&callback%22");
+                    HttpGet postMethod = new HttpGet("https://query.yahooapis.com/v1/public/yql?q=select%20%2A%20from%20yahoo.finance.historicaldata%20where%20symbol%20%3D%20%22" + etAssetName.getText().toString()
+                            + "%22%20and%20startDate%20%3D%20%22" + etStartDate.getText().toString()
+                            + "%22%20and%20endDate%20%3D%20%22" + etEndDate.getText().toString()
+                            + "%22&format=json&diagnostics=true&env=http%3A%2F%2Fdatatables.org%2Falltables.env&callback%22");
                     String response = hc.execute(postMethod, res);
 
                     try {
@@ -428,7 +429,6 @@ public class ChartFragment extends Fragment {
                 if (null != candleStickChart) {
                     CandleData data = candleStickChart.getData();
                     if (null != data) {
-//                        data.removeDataSet(data.getDataSetByIndex(data.getDataSetCount() - 1));
                         data.clearValues();
 
                         if (null != candleChartData && candleChartData.size() > 0) {

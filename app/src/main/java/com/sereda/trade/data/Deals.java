@@ -1,6 +1,8 @@
 package com.sereda.trade.data;
 
-public class Deals {
+import java.io.Serializable;
+
+public class Deals implements Serializable {
     private String symbol;
     private int id;
     private int dealID;
