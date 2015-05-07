@@ -4,11 +4,12 @@ import android.app.Fragment;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
 import com.github.mikephil.charting.charts.LineChart;
 import com.github.mikephil.charting.components.XAxis;
 import com.github.mikephil.charting.components.YAxis;
@@ -16,15 +17,14 @@ import com.github.mikephil.charting.data.BarEntry;
 import com.github.mikephil.charting.data.Entry;
 import com.github.mikephil.charting.data.LineData;
 import com.github.mikephil.charting.data.LineDataSet;
+import com.loopj.android.http.AsyncHttpClient;
+import com.loopj.android.http.AsyncHttpResponseHandler;
 import com.sereda.trade.R;
 import com.sereda.trade.data.Deals;
 import com.sereda.trade.data.LineChartData;
 import needle.Needle;
 import needle.UiRelatedTask;
-import org.apache.http.client.ResponseHandler;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.impl.client.BasicResponseHandler;
-import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.Header;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -35,20 +35,17 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 
 public class TradeFragment extends Fragment {
-    //    private static final String YAHOO = "https://query.yahooapis.com/v1/public/yql?q=select%20*%20from%20yahoo.finance.historicaldata%20where%20symbol%20%3D%20%22MSCI%22%20and%20startDate%20%3D%20%222015-01-01%22%20and%20endDate%20%3D%20%222015-04-30%22&format=json&diagnostics=true&env=http%3A%2F%2Fdatatables.org%2Falltables.env&callback";
     private String symbol, expiration, payout;
     private Deals deal;
     private TextView tvSymbol, tvExpiration, tvPayout;
-    //    private UiRelatedTask<ArrayList<CandleChartData>> chartNeedle;
-//    private ArrayList<CandleChartData> chartData = new ArrayList<>();
-//    private ArrayList<CandleEntry> candleEntries = new ArrayList<>();
-//    private CandleStickChart candleStickChart;
     private LineChart lineChart;
     private ArrayList<LineChartData> lineChartData = new ArrayList<>();
     private UiRelatedTask<ArrayList<LineChartData>> lineChartNeedle;
     private ArrayList<Entry> lineEntries_1 = new ArrayList<>();
     private ArrayList<Entry> lineEntries_2 = new ArrayList<>();
     private String dealID, startAt, endAt, duration, payMatch, payNoMatch, minStake, maxStake;
+    private ProgressBar progressBar;
+    private AsyncHttpClient client;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -71,6 +68,8 @@ public class TradeFragment extends Fragment {
             minStake = String.valueOf(deal.getMinStake());
             maxStake = String.valueOf(deal.getMaxStake());
         }
+
+        client = new AsyncHttpClient();
     }
 
     @Nullable
@@ -82,8 +81,12 @@ public class TradeFragment extends Fragment {
         tvExpiration = (TextView) view.findViewById(R.id.tv_expiry_date);
         tvPayout = (TextView) view.findViewById(R.id.tv_payout);
         lineChart = (LineChart) view.findViewById(R.id.line_chart);
+        progressBar = (ProgressBar) view.findViewById(R.id.progress_bar);
 
-        getLineChartData();
+        String request = createRequest();
+        if (null != request && !request.isEmpty()) {
+            httpRequest(request);
+        }
 
         if (null != symbol && !symbol.isEmpty()) {
             tvSymbol.setText(symbol);
@@ -115,7 +118,52 @@ public class TradeFragment extends Fragment {
         }
     }
 
-    private void getLineChartData() {
+    private String createRequest() {
+        Calendar calendar = Calendar.getInstance();
+        Date endDate = calendar.getTime();
+
+        calendar.setTime(endDate);
+        calendar.add(Calendar.MONTH, -3);
+        Date startDate = calendar.getTime();
+
+        if (null != symbol && !symbol.isEmpty()) {
+            return "https://query.yahooapis.com/v1/public/yql?q=select%20%2A%20from%20yahoo.finance.historicaldata%20" +
+                    "where%20symbol%20%3D%20%22" + getYahooSymbol(symbol)
+                    + "%22%20and%20startDate%20%3D%20%22" + setDate(startDate)
+                    + "%22%20and%20endDate%20%3D%20%22" + setDate(endDate)
+                    + "%22&format=json&diagnostics=true&env=http%3A%2F%2Fdatatables.org%2Falltables.env&callback%22";
+        } else {
+            return null;
+        }
+    }
+
+    private void httpRequest(String request) {
+        if (null != client) {
+            client.cancelAllRequests(true);
+        }
+
+        client.get(request, new AsyncHttpResponseHandler() {
+            @Override
+            public void onStart() {
+            }
+
+            @Override
+            public void onSuccess(int statusCode, Header[] headers, byte[] response) {
+                getLineChartData(response);
+            }
+
+            @Override
+            public void onFailure(int statusCode, Header[] headers, byte[] response, Throwable error) {
+                Toast.makeText(getActivity(), "Looks like request is bad", Toast.LENGTH_LONG).show();
+            }
+
+            @Override
+            public void onRetry(int retryNo) {
+            }
+        });
+    }
+
+    private void getLineChartData(final byte[] response) {
         if (null != lineChartNeedle) {
             lineChartNeedle.cancel();
             lineChartNeedle = null;
@@ -126,49 +174,35 @@ public class TradeFragment extends Fragment {
         if (null != lineEntries_1 && lineEntries_1.size() > 0) {
             lineEntries_1.clear();
         }
+        if (null != lineEntries_2 && lineEntries_2.size() > 0) {
+            lineEntries_2.clear();
+        }
 
         lineChartNeedle = new UiRelatedTask<ArrayList<LineChartData>>() {
             @Override
             protected ArrayList<LineChartData> doWork() {
                 try {
-                    Calendar calendar = Calendar.getInstance();
-                    Date endDate = calendar.getTime();
-
-                    calendar.setTime(endDate);
-                    calendar.add(Calendar.MONTH, -3);
-                    Date startDate = calendar.getTime();
-
-                    DefaultHttpClient hc = new DefaultHttpClient();
-                    ResponseHandler<String> res = new BasicResponseHandler();
-                    HttpGet postMethod = new HttpGet("https://query.yahooapis.com/v1/public/yql?q=select%20%2A%20from%20yahoo.finance.historicaldata%20where%20symbol%20%3D%20%22" + "MSCI"
-                            + "%22%20and%20startDate%20%3D%20%22" + setDate(startDate)
-                            + "%22%20and%20endDate%20%3D%20%22" + setDate(endDate)
-                            + "%22&format=json&diagnostics=true&env=http%3A%2F%2Fdatatables.org%2Falltables.env&callback%22");
-                    String response = hc.execute(postMethod, res);
-
-                    try {
-                        JSONObject json = new JSONObject(response);
-                        JSONObject queryObject = json.getJSONObject("query");
-                        JSONObject resultsObject = queryObject.getJSONObject("results");
-                        JSONArray quoteArray = resultsObject.getJSONArray("quote");
-                        for (int i = 0; i < quoteArray.length(); i++) {
-                            lineChartData.add(new LineChartData(i,
-                                    quoteArray.getJSONObject(i).getString("Date"),
-                                    quoteArray.getJSONObject(i).getDouble("Close")));
-                        }
-                    } catch (JSONException e) {
-                        e.printStackTrace();
+                    JSONObject json = new JSONObject(new String(response));
+                    JSONObject queryObject = json.getJSONObject("query");
+                    JSONObject resultsObject = queryObject.getJSONObject("results");
+                    JSONArray quoteArray = resultsObject.getJSONArray("quote");
+                    for (int i = 0; i < quoteArray.length(); i++) {
+                        lineChartData.add(new LineChartData(i,
+                                quoteArray.getJSONObject(i).getString("Date"),
+                                quoteArray.getJSONObject(i).getDouble("Close")));
                     }
-                } catch (Exception e) {
+                } catch (JSONException e) {
                     e.printStackTrace();
                 }
-
 
                 return lineChartData;
             }
 
             @Override
             protected void thenDoUiRelatedWork(ArrayList<LineChartData> result) {
+                progressBar.setVisibility(View.GONE);
+                lineChart.setVisibility(View.VISIBLE);
+
                 float open = 0;
                 float close = 0;
 
@@ -253,94 +287,28 @@ public class TradeFragment extends Fragment {
         Needle.onBackgroundThread().withThreadPoolSize(1).execute(lineChartNeedle);
     }
 
-//    private void getCandleChartData() {
-//        chartNeedle = new UiRelatedTask<ArrayList<CandleChartData>>() {
-//            @Override
-//            protected ArrayList<CandleChartData> doWork() {
-//                try {
-//                    Calendar calendar = Calendar.getInstance();
-//                    Date endDate = calendar.getTime();
-//
-//                    calendar.setTime(endDate);
-//                    calendar.add(Calendar.MONTH, -3);
-//                    Date startDate = calendar.getTime();
-//
-//                    Log.e("mylog", "2: " + setDate(startDate));
-//
-//                    DefaultHttpClient hc = new DefaultHttpClient();
-//                    ResponseHandler<String> res = new BasicResponseHandler();
-//                    HttpGet postMethod = new HttpGet("https://query.yahooapis.com/v1/public/yql?q=select%20%2A%20from%20yahoo.finance.historicaldata%20where%20symbol%20%3D%20%22" + "MSCI"
-//                            + "%22%20and%20startDate%20%3D%20%22" + setDate(startDate)
-//                            + "%22%20and%20endDate%20%3D%20%22" + setDate(endDate)
-//                            + "%22&format=json&diagnostics=true&env=http%3A%2F%2Fdatatables.org%2Falltables.env&callback%22");
-//                    String response = hc.execute(postMethod, res);
-//
-//                    try {
-//                        JSONObject json = new JSONObject(response);
-//                        JSONObject queryObject = json.getJSONObject("query");
-//                        JSONObject resultsObject = queryObject.getJSONObject("results");
-//                        JSONArray quoteArray = resultsObject.getJSONArray("quote");
-//                        for (int i = 0; i < quoteArray.length(); i++) {
-//                            chartData.add(new CandleChartData(i,
-//                                    quoteArray.getJSONObject(i).getString("Symbol"),
-//                                    quoteArray.getJSONObject(i).getString("Date"),
-//                                    quoteArray.getJSONObject(i).getDouble("Open"),
-//                                    quoteArray.getJSONObject(i).getDouble("High"),
-//                                    quoteArray.getJSONObject(i).getDouble("Low"),
-//                                    quoteArray.getJSONObject(i).getDouble("Close"),
-//                                    quoteArray.getJSONObject(i).getInt("Volume"),
-//                                    quoteArray.getJSONObject(i).getDouble("Adj_Close")));
-//                        }
-//                    } catch (JSONException e) {
-//                        e.printStackTrace();
-//                    }
-//                } catch (Exception e) {
-//                    e.printStackTrace();
-//                }
-//
-//                return chartData;
-//            }
-//
-//            @Override
-//            protected void thenDoUiRelatedWork(ArrayList<CandleChartData> result) {
-//                Collections.reverse(result);
-//                for (int i = 0; i < result.size(); i++) {
-//                    candleEntries.add(new CandleEntry(i,
-//                            Float.parseFloat(String.valueOf(result.get(i).getHigh())),
-//                            Float.parseFloat(String.valueOf(result.get(i).getLow())),
-//                            Float.parseFloat(String.valueOf(result.get(i).getOpen())),
-//                            Float.parseFloat(String.valueOf(result.get(i).getClose()))));
-//                }
-//
-//                CandleDataSet candleDataSet = new CandleDataSet(candleEntries, symbol);
-//                candleDataSet.setAxisDependency(YAxis.AxisDependency.LEFT);
-//                candleDataSet.setColor(Color.rgb(80, 80, 80));
-//                candleDataSet.setShadowColor(Color.DKGRAY);
-//                candleDataSet.setShadowWidth(0.7f);
-//                candleDataSet.setDecreasingColor(Color.RED);
-//                candleDataSet.setDecreasingPaintStyle(Paint.Style.STROKE);
-//                candleDataSet.setIncreasingColor(Color.rgb(122, 242, 84));
-//                candleDataSet.setIncreasingPaintStyle(Paint.Style.FILL);
-//
-//                XAxis xAxis = candleStickChart.getXAxis();
-//                xAxis.setPosition(XAxis.XAxisPosition.BOTTOM);
-//
-//                YAxis leftAxis = candleStickChart.getAxisLeft();
-//                YAxis rightAxis = candleStickChart.getAxisRight();
-//                leftAxis.setStartAtZero(false);
-//                rightAxis.setStartAtZero(false);
-//
-//                ArrayList<String> xVals = new ArrayList<>();
-//                for (int i = 0; i < chartData.size(); i++) {
-//                    xVals.add(chartData.get(i).getDate());
-//                }
-//
-//                CandleData data = new CandleData(xVals, candleDataSet);
-//
-//                candleStickChart.setData(data);
-//                candleStickChart.invalidate();
-//            }
-//        };
-//        Needle.onBackgroundThread().withThreadPoolSize(1).execute(chartNeedle);
-//    }
+    private YahooSymbols getYahooSymbol(String symbol) {
+        switch (InnerSymbols.valueOf(symbol)) {
+            case AP1USD:
+                return YahooSymbols.AAPL;
+            case CC1USD:
+                return YahooSymbols.CCE;
+            case EB1USD:
+                return YahooSymbols.EBAY;
+            case FB1USD:
+                return YahooSymbols.FB;
+            case FO1USD:
+                return YahooSymbols.F;
+            case GO1USD:
+                return YahooSymbols.GOOG;
+            case IB1USD:
+                return YahooSymbols.IBM;
+            default:
+                return null;
+        }
+    }
+
+    private enum YahooSymbols {AAPL, CCE, EBAY, FB, F, GOOG, IBM}
+
+    private enum InnerSymbols {AP1USD, CC1USD, EB1USD, FB1USD, FO1USD, GO1USD, IB1USD}
 }
