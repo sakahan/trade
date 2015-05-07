@@ -10,18 +10,22 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.Toast;
 import com.github.mikephil.charting.charts.BarChart;
 import com.github.mikephil.charting.charts.CandleStickChart;
 import com.github.mikephil.charting.charts.LineChart;
 import com.github.mikephil.charting.components.XAxis;
 import com.github.mikephil.charting.components.YAxis;
 import com.github.mikephil.charting.data.*;
+import com.loopj.android.http.AsyncHttpClient;
+import com.loopj.android.http.AsyncHttpResponseHandler;
 import com.sereda.trade.R;
 import com.sereda.trade.data.BarChartData;
 import com.sereda.trade.data.CandleChartData;
 import com.sereda.trade.data.LineChartData;
 import needle.Needle;
 import needle.UiRelatedTask;
+import org.apache.http.Header;
 import org.apache.http.client.ResponseHandler;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.BasicResponseHandler;
@@ -55,6 +59,8 @@ public class ChartFragment extends Fragment {
     private ArrayList<LineDataSet> lineDataSet;
     private CandleDataSet candleDataSet;
     private String end = null, start = null;
+    private AsyncHttpClient client;
+    private String request;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -68,6 +74,8 @@ public class ChartFragment extends Fragment {
         lineEntries = new ArrayList<>();
         barDataSet = new ArrayList<>();
         lineDataSet = new ArrayList<>();
+
+        client = new AsyncHttpClient();
     }
 
     @Nullable
@@ -79,9 +87,15 @@ public class ChartFragment extends Fragment {
         btAddChart.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                getCandleChartData();
+                setStartEndDate();
+                request = createRequest(symbolName());
+                if (null != request && !request.isEmpty()) {
+                    httpRequest(request, CANDLE_STICK_CHART);
+                }
 
                 btCandleChart.setEnabled(false);
+                btBarChart.setEnabled(true);
+                btLineChart.setEnabled(true);
                 candleStickChart.setVisibility(View.VISIBLE);
                 barChart.setVisibility(View.GONE);
                 lineChart.setVisibility(View.GONE);
@@ -109,10 +123,69 @@ public class ChartFragment extends Fragment {
         return view;
     }
 
+    private String symbolName() {
+        if (!etAssetName.getText().toString().isEmpty()) {
+            return etAssetName.getText().toString();
+        } else {
+            return null;
+        }
+    }
+
+    private String createRequest(String symbol) {
+        return "https://query.yahooapis.com/v1/public/yql?q=select%20%2A%20from%20yahoo.finance.historicaldata%20" +
+                "where%20symbol%20%3D%20%22" + symbol
+                + "%22%20and%20startDate%20%3D%20%22" + start
+                + "%22%20and%20endDate%20%3D%20%22" + end
+                + "%22&format=json&diagnostics=true&env=http%3A%2F%2Fdatatables.org%2Falltables.env&callback%22";
+    }
+
+    private void httpRequest(String request, final int chartType) {
+        if (null != client) {
+            client.cancelAllRequests(true);
+        }
+
+        client.get(request, new AsyncHttpResponseHandler() {
+            @Override
+            public void onStart() {
+            }
+
+            @Override
+            public void onSuccess(int statusCode, Header[] headers, byte[] response) {
+
+                switch (chartType) {
+                    case CANDLE_STICK_CHART:
+                        getCandleChartData(response);
+                        break;
+                    case BAR_CHART:
+                        getBarChartData(response);
+                        break;
+                    case LINE_CHART:
+                        getLineChartData(response);
+                        break;
+                    default:
+                        getCandleChartData(response);
+                }
+            }
+
+            @Override
+            public void onFailure(int statusCode, Header[] headers, byte[] response, Throwable error) {
+                Toast.makeText(getActivity(), "Looks like request is bad", Toast.LENGTH_LONG).show();
+            }
+
+            @Override
+            public void onRetry(int retryNo) {
+            }
+        });
+    }
+
     private void changeChart(int chosenButton) {
         switch (chosenButton) {
             case CANDLE_STICK_CHART:
-                getCandleChartData();
+                setStartEndDate();
+                request = createRequest(symbolName());
+                if (null != request && !request.isEmpty()) {
+                    httpRequest(request, CANDLE_STICK_CHART);
+                }
                 btCandleChart.setEnabled(false);
                 btBarChart.setEnabled(true);
                 btLineChart.setEnabled(true);
@@ -122,7 +195,11 @@ public class ChartFragment extends Fragment {
                 lineChart.setVisibility(View.GONE);
                 break;
             case BAR_CHART:
-                getBarChartData();
+                setStartEndDate();
+                request = createRequest(symbolName());
+                if (null != request && !request.isEmpty()) {
+                    httpRequest(request, BAR_CHART);
+                }
                 btCandleChart.setEnabled(true);
                 btBarChart.setEnabled(false);
                 btLineChart.setEnabled(true);
@@ -132,7 +209,11 @@ public class ChartFragment extends Fragment {
                 lineChart.setVisibility(View.GONE);
                 break;
             case LINE_CHART:
-                getLineChartData();
+                setStartEndDate();
+                request = createRequest(symbolName());
+                if (null != request && !request.isEmpty()) {
+                    httpRequest(request, LINE_CHART);
+                }
                 btCandleChart.setEnabled(true);
                 btBarChart.setEnabled(true);
                 btLineChart.setEnabled(false);
@@ -185,29 +266,18 @@ public class ChartFragment extends Fragment {
         }
     }
 
-    private void getCandleChartData() {
+    private void getCandleChartData(final byte[] response) {
         if (null != candleChartNeedle) {
             candleChartNeedle.cancel();
             candleChartNeedle = null;
         }
         removeLineDataSet(CANDLE_STICK_CHART);
-        setStartEndDate();
 
         candleChartNeedle = new UiRelatedTask<ArrayList<CandleChartData>>() {
             @Override
             protected ArrayList<CandleChartData> doWork() {
-                try {
-                    DefaultHttpClient hc = new DefaultHttpClient();
-                    ResponseHandler<String> res = new BasicResponseHandler();
-                    HttpGet postMethod = new HttpGet("https://query.yahooapis.com/v1/public/yql?q=select%20%2A%20from%20yahoo.finance.historicaldata%20where%20symbol%20%3D%20%22"
-                            + etAssetName.getText().toString()
-                            + "%22%20and%20startDate%20%3D%20%22" + start
-                            + "%22%20and%20endDate%20%3D%20%22" + end
-                            + "%22&format=json&diagnostics=true&env=http%3A%2F%2Fdatatables.org%2Falltables.env&callback%22");
-                    String response = hc.execute(postMethod, res);
-
                     try {
-                        JSONObject json = new JSONObject(response);
+                        JSONObject json = new JSONObject(new String(response));
                         JSONObject queryObject = json.getJSONObject("query");
                         JSONObject resultsObject = queryObject.getJSONObject("results");
                         JSONArray quoteArray = resultsObject.getJSONArray("quote");
@@ -225,9 +295,6 @@ public class ChartFragment extends Fragment {
                     } catch (JSONException e) {
                         e.printStackTrace();
                     }
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
 
                 return candleChartData;
             }
@@ -290,7 +357,7 @@ public class ChartFragment extends Fragment {
         Needle.onBackgroundThread().withThreadPoolSize(1).execute(candleChartNeedle);
     }
 
-    private void getBarChartData() {
+    private void getBarChartData(final byte[] response) {
         if (null != barChartNeedle) {
             barChartNeedle.cancel();
             barChartNeedle = null;
@@ -301,23 +368,12 @@ public class ChartFragment extends Fragment {
         if (null != barEntries && barEntries.size() > 0) {
             barEntries.clear();
         }
-        setStartEndDate();
 
         barChartNeedle = new UiRelatedTask<ArrayList<BarChartData>>() {
             @Override
             protected ArrayList<BarChartData> doWork() {
-                try {
-                    DefaultHttpClient hc = new DefaultHttpClient();
-                    ResponseHandler<String> res = new BasicResponseHandler();
-                    HttpGet postMethod = new HttpGet("https://query.yahooapis.com/v1/public/yql?q=select%20%2A%20from%20yahoo.finance.historicaldata%20where%20symbol%20%3D%20%22"
-                            + etAssetName.getText().toString()
-                            + "%22%20and%20startDate%20%3D%20%22" + start
-                            + "%22%20and%20endDate%20%3D%20%22" + end
-                            + "%22&format=json&diagnostics=true&env=http%3A%2F%2Fdatatables.org%2Falltables.env&callback%22");
-                    String response = hc.execute(postMethod, res);
-
                     try {
-                        JSONObject json = new JSONObject(response);
+                        JSONObject json = new JSONObject(new String(response));
                         JSONObject queryObject = json.getJSONObject("query");
                         JSONObject resultsObject = queryObject.getJSONObject("results");
                         JSONArray quoteArray = resultsObject.getJSONArray("quote");
@@ -329,9 +385,6 @@ public class ChartFragment extends Fragment {
                     } catch (JSONException e) {
                         e.printStackTrace();
                     }
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
 
                 return barChartData;
             }
@@ -378,7 +431,7 @@ public class ChartFragment extends Fragment {
         Needle.onBackgroundThread().withThreadPoolSize(1).execute(barChartNeedle);
     }
 
-    private void getLineChartData() {
+    private void getLineChartData(final byte[] response) {
         if (null != lineChartNeedle) {
             lineChartNeedle.cancel();
             lineChartNeedle = null;
@@ -389,23 +442,12 @@ public class ChartFragment extends Fragment {
         if (null != lineEntries && lineEntries.size() > 0) {
             lineEntries.clear();
         }
-        setStartEndDate();
 
         lineChartNeedle = new UiRelatedTask<ArrayList<LineChartData>>() {
             @Override
             protected ArrayList<LineChartData> doWork() {
-                try {
-                    DefaultHttpClient hc = new DefaultHttpClient();
-                    ResponseHandler<String> res = new BasicResponseHandler();
-                    HttpGet postMethod = new HttpGet("https://query.yahooapis.com/v1/public/yql?q=select%20%2A%20from%20yahoo.finance.historicaldata%20where%20symbol%20%3D%20%22"
-                            + etAssetName.getText().toString()
-                            + "%22%20and%20startDate%20%3D%20%22" + start
-                            + "%22%20and%20endDate%20%3D%20%22" + end
-                            + "%22&format=json&diagnostics=true&env=http%3A%2F%2Fdatatables.org%2Falltables.env&callback%22");
-                    String response = hc.execute(postMethod, res);
-
                     try {
-                        JSONObject json = new JSONObject(response);
+                        JSONObject json = new JSONObject(new String(response));
                         JSONObject queryObject = json.getJSONObject("query");
                         JSONObject resultsObject = queryObject.getJSONObject("results");
                         JSONArray quoteArray = resultsObject.getJSONArray("quote");
@@ -417,9 +459,6 @@ public class ChartFragment extends Fragment {
                     } catch (JSONException e) {
                         e.printStackTrace();
                     }
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
 
                 return lineChartData;
             }
